@@ -5,16 +5,17 @@ const DynamicLogger = require('../lib/index')
 var numCPUs = 4;
 
 
-const inspectServer = new DynamicLogger(3001);
+const inspectServer = new DynamicLogger();
 if (cluster.isMaster) {
     for (var i = 0; i < numCPUs; i++) {
         const worker = cluster.fork()
-        setTimeout(() => worker.send({msg: "msg"}));
+        // setTimeout(() => worker.send({msg: "msg"}));
     }
-    inspectServer.run();
+    inspectServer.run(3001);
 } else {
+    process.on('message', console.log);
     inspectServer.listenOnWorker();
-    http.createServer(function(req, res) {
+    const server = http.createServer(function(req, res) {
         const ff = "GUY_TEST";
         res.writeHead(200);
 

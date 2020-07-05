@@ -12,7 +12,8 @@ export = class DynamicLogger {
   private app: express.Application;
   private server: Server | null = null;
 
-  constructor(private port: number) {
+  // Called on Master
+  constructor() {
     this.session = new inspector.Session();
     this.app = express();
     this.app.use(bodyParser.json());
@@ -26,16 +27,27 @@ export = class DynamicLogger {
     this.app.use(this.errorHandler.bind(this));
   }
 
-  public run() {
-    this.session.connect();
-    this.runServer();
+  // Called on Master
+  public run(port: number) {
+    try {
+      this.session.connect();
+      this.runServer(port);
+    } catch (e) {
+      console.error('Error running inspection server. Error: ', e);
+    }
   }
 
+  // Called on Master
   public stop() {
-    if (this.server) {
+    if (this.server?.listening) {
       this.server.close();
     }
     this.session.disconnect();
+  }
+
+  // Called on Master
+  public isRunning() {
+    return this.server?.listening;
   }
 
   // Called on workers
@@ -50,15 +62,16 @@ export = class DynamicLogger {
         case 'setLogpoint': {
           this.setLogpointImp(msg.params);
         }
-        // case 'removeLogpoint': {
-        //   this.removeLogpointImp(msg.params);
-        // }
       }
     })
   }
 
-  private runServer() {
-    this.server = this.app.listen(this.port, () => console.log(`Dynamic logger listening at http://localhost:${this.port}`));
+  private runServer(port: number) {
+    if (this.server?.listening) {
+      console.log('Inspect server already running');
+      return;
+    }
+    this.server = this.app.listen(port, () => console.log(`Dynamic logger listening at http://localhost:${port}`));
   }
 
   // Called on Master
@@ -85,18 +98,6 @@ export = class DynamicLogger {
     }).catch(e => next(e));
   }
 
-  // private async removeLogpoint(req: express.Request, res: express.Response, next: express.NextFunction) {
-  //   const params = {
-  //     breakpointId: req.body.logpointId,
-  //   }
-
-  //   bluebird.try(async () => {
-  //     const result = await this.postMethod('Debugger.removeBreakpoint', params);
-  //     console.log("Removed logpoint: ", JSON.stringify(result));
-  //     res.send(result);
-  //   }).catch(e => next(e));
-  // }
-
   private async setLogpointImp(params: MethodParams) {
     const logpoint = await this.postMethod('Debugger.setBreakpointByUrl', params);
     console.log("Added logpoint: ", JSON.stringify(logpoint));
@@ -120,7 +121,7 @@ export = class DynamicLogger {
 
   private errorHandler(err: any, req: any, res: any, next: any) {
     console.error("Error adding logpoint. Error: ", err);
-    return res.status(err.status || 500).send('Error adding logpoint');
+    return res.status(err.status || 500).send(err);
   }
 }
 
