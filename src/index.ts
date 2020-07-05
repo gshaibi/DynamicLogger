@@ -2,12 +2,11 @@ import express = require('express');
 import bodyParser = require('body-parser');
 import inspector = require('inspector');
 import bluebird = require('bluebird');
-import { Server } from 'http';
 import cluster = require('cluster');
+import { Server } from 'http';
+import {MethodParams, SessionPostResult, SetLogpointParams, RemoveLogpointParams} from './Types';
 
-type MethodParams = {} | undefined;
-
-export = class DynamicLogger {
+class DynamicLogger {
   private session: inspector.Session;
   private app: express.Application;
   private server: Server | null = null;
@@ -21,8 +20,8 @@ export = class DynamicLogger {
       extended: true
     }));
 
-    this.app.post('/setLogpoint', this.setLogpoint.bind(this));
-    // this.app.post('/removeLogpoint', this.removeLogpoint.bind(this));
+    this.app.post('/logpoint', this.setLogpoint.bind(this));
+    this.app.delete('/logpoint', this.removeLogpoint.bind(this));
 
     this.app.use(this.errorHandler.bind(this));
   }
@@ -80,17 +79,9 @@ export = class DynamicLogger {
       urlRegex: req.body.urlRegex,
       lineNumber: req.body.lineNumber,
       condition: `console.log(${req.body.message}) && false`
-    }
+    };
 
-    for (const id in cluster.workers) {
-      if (cluster.workers[id] !== undefined) {
-        cluster.workers[id]!.send({
-          type: 'inspectCmd',
-          cmd: 'setLogpoint',
-          params: params
-        })
-      }
-    }
+    this.sendInspectCmdToAllWorkers('setLogpoint', params);
 
     bluebird.try(async () => {
       const logpoint = await this.setLogpointImp(params);
@@ -98,13 +89,53 @@ export = class DynamicLogger {
     }).catch(e => next(e));
   }
 
-  private async setLogpointImp(params: MethodParams) {
+  // Called on Master
+  private async removeLogpoint(req: express.Request, res: express.Response, next: express.NextFunction) {
+    const params = {
+      breakpointId: req.body.breakpointId
+    };
+
+    this.sendInspectCmdToAllWorkers('removeLogpoint', params);
+
+    bluebird.try(async () => {
+      const result = await this.removeLogpointImp(params);
+      res.send(result);
+    }).catch(e => next(e));
+  }
+
+  // Called on Master
+  private async sendInspectCmdToAllWorkers(cmd: string, params: MethodParams) {
+    for (const id in cluster.workers) {
+      if (cluster.workers[id] !== undefined) {
+        cluster.workers[id]!.send({
+          type: 'inspectCmd',
+          cmd: cmd,
+          params: params
+        })
+      }
+    }
+  }
+
+  private async setLogpointImp(params: SetLogpointParams) {
     const logpoint = await this.postMethod('Debugger.setBreakpointByUrl', params);
     console.log("Added logpoint: ", JSON.stringify(logpoint));
     return logpoint;
   }
 
-  private async postMethod(methodName: string, params: MethodParams): Promise<MethodParams> {
+  private async removeLogpointImp(params: RemoveLogpointParams) {
+    let result;
+    if (!params?.breakpointId) {
+      // Remove all breakpoints
+      result = await this.postMethod('Debugger.setSkipAllPauses');
+      console.log("Removed all logpoints: ", JSON.stringify(result));
+    } else {
+      result = await this.postMethod('Debugger.removeBreakpoint', params);
+      console.log("Removed logpoint: ", JSON.stringify(result));
+    }
+    return result;
+  }
+
+  private async postMethod(methodName: string, params?: MethodParams): Promise<SessionPostResult> {
     console.debug("Posting method: ", JSON.stringify(methodName), " with params: ", params);
     return new Promise((resolve, reject) => {
       this.session.post('Debugger.enable', {});
@@ -125,3 +156,4 @@ export = class DynamicLogger {
   }
 }
 
+export = DynamicLogger;
