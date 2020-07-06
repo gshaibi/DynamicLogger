@@ -1,7 +1,7 @@
 {
   "name": "dynamic-logger-express",
   "version": "1.0.12",
-  "description": "",
+  "description": "Add dynamic logs to a running node process",
   "main": "lib/index",
   "types": "lib/index",
   "scripts": {
