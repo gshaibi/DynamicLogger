@@ -1,6 +1,6 @@
 {
   "name": "dynamic-logger-express",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "description": "",
   "main": "lib/index",
   "types": "lib/index",
