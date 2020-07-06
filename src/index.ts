@@ -6,6 +6,7 @@ import cluster = require('cluster');
 import { Server } from 'http';
 import {MethodParams, SessionPostResult, SetLogpoint, RemoveLogpoint, RemoveAllLogpoints, MethodType} from './Types';
 
+// Todo: Arrange this shitty typescript
 class DynamicLogger {
   private session: inspector.Session;
   private app: express.Application;
@@ -42,6 +43,7 @@ class DynamicLogger {
       this.server.close();
     }
     this.session.disconnect();
+    this.sendInspectCmdToAllWorkers('disconnect');
   }
 
   // Called on Master
@@ -60,6 +62,13 @@ class DynamicLogger {
       switch (msg.cmd) {
         case 'setLogpoint': {
           this.setLogpointImp(msg.params);
+          break;
+        } case 'removeLogpoint': {
+          this.removeLogpointImp(msg.params);
+          break;
+        } case 'disconnect': {
+          this.session.disconnect();
+          break;
         }
       }
     })
@@ -113,7 +122,7 @@ class DynamicLogger {
   }
 
   // Called on Master
-  private async sendInspectCmdToAllWorkers(cmd: string, params: MethodParams) {
+  private async sendInspectCmdToAllWorkers(cmd: string, params?: MethodParams) {
     for (const id in cluster.workers) {
       if (cluster.workers[id] !== undefined) {
         cluster.workers[id]!.send({
@@ -135,7 +144,7 @@ class DynamicLogger {
 
   private async removeLogpointImp(params: RemoveLogpoint['params'] | RemoveAllLogpoints['params']) {
     let result;
-    if (params) {
+    if ("skip" in params) {
       // Remove all breakpoints
       result = await this.postMethod('Debugger.setSkipAllPauses', params);
       console.log("Removed all logpoints: ", JSON.stringify(result));
