@@ -4,7 +4,7 @@ import inspector = require('inspector');
 import bluebird = require('bluebird');
 import cluster = require('cluster');
 import { Server } from 'http';
-import {MethodParams, SessionPostResult, SetLogpointParams, RemoveLogpointParams} from './Types';
+import {MethodParams, SessionPostResult, SetLogpoint, RemoveLogpoint, RemoveAllLogpoints, MethodType} from './Types';
 
 class DynamicLogger {
   private session: inspector.Session;
@@ -91,9 +91,18 @@ class DynamicLogger {
 
   // Called on Master
   private async removeLogpoint(req: express.Request, res: express.Response, next: express.NextFunction) {
-    const params = {
-      breakpointId: req.body.breakpointId
-    };
+    let params: RemoveLogpoint['params'] | RemoveAllLogpoints['params'];
+    if (req.body.breakpointId) {
+      // Remove specific logpoint
+      params = {
+        breakpointId: req.body.breakpointId
+      };
+    } else {
+      // Remove all logpoints
+      params = {
+        skip: true
+      }
+    }
 
     this.sendInspectCmdToAllWorkers('removeLogpoint', params);
 
@@ -116,17 +125,19 @@ class DynamicLogger {
     }
   }
 
-  private async setLogpointImp(params: SetLogpointParams) {
+  private async setLogpointImp(params: SetLogpoint['params']) {
     const logpoint = await this.postMethod('Debugger.setBreakpointByUrl', params);
-    console.log("Added logpoint: ", JSON.stringify(logpoint));
+    if (logpoint) {
+      console.log("Added logpoint: ", JSON.stringify(logpoint));
+    }
     return logpoint;
   }
 
-  private async removeLogpointImp(params: RemoveLogpointParams) {
+  private async removeLogpointImp(params: RemoveLogpoint['params'] | RemoveAllLogpoints['params']) {
     let result;
-    if (!params?.breakpointId) {
+    if (params) {
       // Remove all breakpoints
-      result = await this.postMethod('Debugger.setSkipAllPauses');
+      result = await this.postMethod('Debugger.setSkipAllPauses', params);
       console.log("Removed all logpoints: ", JSON.stringify(result));
     } else {
       result = await this.postMethod('Debugger.removeBreakpoint', params);
@@ -135,7 +146,7 @@ class DynamicLogger {
     return result;
   }
 
-  private async postMethod(methodName: string, params?: MethodParams): Promise<SessionPostResult> {
+  private async postMethod<T extends MethodType>(methodName: T['methodName'], params?: T['params']): Promise<SessionPostResult | unknown> {
     console.debug("Posting method: ", JSON.stringify(methodName), " with params: ", params);
     return new Promise((resolve, reject) => {
       this.session.post('Debugger.enable', {});
@@ -147,7 +158,7 @@ class DynamicLogger {
         }
         resolve(result);
       });
-    })
+    }).catch(console.log);
   }
 
   private errorHandler(err: any, req: any, res: any, next: any) {

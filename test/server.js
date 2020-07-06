@@ -2,9 +2,10 @@ const InspectServer = require('../lib/index')
 const express = require('express')
 const app = express()
 const port = 3000
+const inspectorPort = 3001
 
-const inspectServer = new InspectServer(3001);
-inspectServer.run();
+const inspectServer = new InspectServer();
+inspectServer.run(inspectorPort);
 
 app.get('/', (req, res) => {
   const t = "GUY_TEST";

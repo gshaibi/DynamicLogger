@@ -1,8 +1,6 @@
-POST http://localhost:3001/logpoint
+DELETE http://localhost:3001/logpoint
 Content-Type: application/json
 
 {
-  "urlRegex": "cluster",
-  "lineNumber": 21,
-  "message": "ff + \" On process\" + process.pid"
+  "breakpointId": "2:21:0:cluster"
 }
