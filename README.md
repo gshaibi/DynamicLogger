@@ -3,10 +3,14 @@ Supports cluster architecture.
 
 Simple Usage:
 ```js
+var http = require('http');
 var DynamicLogger = require('dynamic-logger-express');
 var logger = new DynamicLogger();
 
-logger.run(3001);
+var myServer = http.createServer();
+
+logger.addLoggerAppToServer(myServer);
+logger.activate();
 ```
 
 Usage with cluster:
@@ -14,11 +18,18 @@ Usage with cluster:
 ```js
 var DynamicLogger = require('dynamic-logger-express');
 var logger = new DynamicLogger();
+var masterServerPort = 10000;
 
 if (cluster.isMaster) {
-  logger.run(3001);
+  const masterServer = http.createServer();
+
+  dynamicLogger.addLoggerAppToServer(masterServer);
+  dynamicLogger.activate();
+
+  masterServer.listen(masterServerPort, () => console.log("Master listening on port ", masterServerPort));
 } else {
   logger.listenOnWorker();
+  // execute anything on the worker, and enjoy the power of dynamic logging!
 }
 ```
 
