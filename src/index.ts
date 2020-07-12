@@ -9,26 +9,26 @@ import {MethodParams, SessionPostResult, SetLogpoint, RemoveLogpoint, RemoveAllL
 // Todo: Arrange this shitty typescript
 // Todo: Use Winston as logger
 class DynamicLogger {
-  private session: inspector.Session;
-  private app: express.Application;
-  private isActive: boolean = false;
-  private isSessionConnected: boolean = false;
+  private _session: inspector.Session;
+  private _app: express.Application;
+  private _isActive: boolean = false;
+  private _isSessionConnected: boolean = false;
 
   public readonly LOGPOINT_ROUTE = '/logpoint';
 
   // Called on Master
   constructor() {
-    this.session = new inspector.Session();
-    this.app = express();
-    this.app.use(bodyParser.json());
-    this.app.use(bodyParser.urlencoded({
+    this._session = new inspector.Session();
+    this._app = express();
+    this._app.use(bodyParser.json());
+    this._app.use(bodyParser.urlencoded({
       extended: true
     }));
 
-    this.app.post(this.LOGPOINT_ROUTE, this.setLogpoint.bind(this));
-    this.app.delete(this.LOGPOINT_ROUTE, this.removeLogpoint.bind(this));
+    this._app.post(this.LOGPOINT_ROUTE, this.setLogpoint.bind(this));
+    this._app.delete(this.LOGPOINT_ROUTE, this.removeLogpoint.bind(this));
 
-    this.app.use(this.errorHandler.bind(this));
+    this._app.use(this.errorHandler.bind(this));
   }
 
   // Called on Master
@@ -40,14 +40,18 @@ class DynamicLogger {
   public activate() {
     this.connectSession();
     this.sendInspectCmdToAllWorkers('connect');
-    this.isActive = true;
+    this._isActive = true;
   }
 
   // Called on Master
   public deactivate() {
-    this.isActive = false;
+    this._isActive = false;
     this.sendInspectCmdToAllWorkers('disconnect');
     this.disconnectSession();
+  }
+
+  public get isActive(): Readonly<boolean> {
+    return this._isActive;
   }
 
   // Called on workers
@@ -79,24 +83,24 @@ class DynamicLogger {
   }
 
   private connectSession() {
-    if (this.isSessionConnected) {
+    if (this._isSessionConnected) {
       // Double connection throws error.
       return;
     }
-    this.session.connect();
-    this.isSessionConnected = true;
+    this._session.connect();
+    this._isSessionConnected = true;
   }
 
   private disconnectSession() {
-    this.session.disconnect();
-    this.isSessionConnected = false;
+    this._session.disconnect();
+    this._isSessionConnected = false;
   }
 
   private addLoggerAppToServer(server: http.Server) {
     console.log("Adding to server")
     server.on('request', (req, res) => {
-      if (req.url === this.LOGPOINT_ROUTE && this.isActive) {
-        this.app(req, res);
+      if (req.url === this.LOGPOINT_ROUTE && this._isActive) {
+        this._app(req, res);
       }
     })
   }
@@ -177,9 +181,9 @@ class DynamicLogger {
   private async postMethod<T extends MethodType>(methodName: T['methodName'], params?: T['params']): Promise<SessionPostResult | unknown> {
     console.debug("Posting method: ", JSON.stringify(methodName), " with params: ", params);
     return new Promise((resolve, reject) => {
-      this.session.post('Debugger.enable', {});
+      this._session.post('Debugger.enable', {});
 
-      this.session.post(methodName, params, (err, result) => {
+      this._session.post(methodName, params, (err, result) => {
         if (err) {
           reject(err);
           return;
