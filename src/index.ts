@@ -3,14 +3,18 @@ import bodyParser = require('body-parser');
 import inspector = require('inspector');
 import bluebird = require('bluebird');
 import cluster = require('cluster');
-import { Server } from 'http';
+import http = require('http');
 import {MethodParams, SessionPostResult, SetLogpoint, RemoveLogpoint, RemoveAllLogpoints, MethodType} from './Types';
 
 // Todo: Arrange this shitty typescript
+// Todo: Use Winston as logger
 class DynamicLogger {
   private session: inspector.Session;
   private app: express.Application;
-  private server: Server | null = null;
+  private isActive: boolean = false;
+  private isSessionConnected: boolean = false;
+
+  public readonly LOGPOINT_ROUTE = '/logpoint';
 
   // Called on Master
   constructor() {
@@ -21,39 +25,35 @@ class DynamicLogger {
       extended: true
     }));
 
-    this.app.post('/logpoint', this.setLogpoint.bind(this));
-    this.app.delete('/logpoint', this.removeLogpoint.bind(this));
+    this.app.post(this.LOGPOINT_ROUTE, this.setLogpoint.bind(this));
+    this.app.delete(this.LOGPOINT_ROUTE, this.removeLogpoint.bind(this));
 
     this.app.use(this.errorHandler.bind(this));
   }
 
   // Called on Master
-  public run(port: number) {
-    try {
-      this.session.connect();
-      this.runServer(port);
-    } catch (e) {
-      console.error('Error running inspection server. Error: ', e);
-    }
+  public addLoggerToServer(server: http.Server) {
+    this.addLoggerAppToServer(server);
   }
 
   // Called on Master
-  public stop() {
-    if (this.server?.listening) {
-      this.server.close();
-    }
-    this.session.disconnect();
+  public activate() {
+    this.connectSession();
+    this.sendInspectCmdToAllWorkers('connect');
+    this.isActive = true;
+  }
+
+  // Called on Master
+  public deactivate() {
+    this.isActive = false;
     this.sendInspectCmdToAllWorkers('disconnect');
-  }
-
-  // Called on Master
-  public isRunning() {
-    return this.server?.listening;
+    this.disconnectSession();
   }
 
   // Called on workers
   public listenOnWorker() {
-    this.session.connect();
+    // Connecting immediately just in case we missed the 'connect' command.
+    this.connectSession();
 
     cluster.worker.on('message', (msg) => {
       if (msg.type !== 'inspectCmd') {
@@ -67,19 +67,38 @@ class DynamicLogger {
           this.removeLogpointImp(msg.params);
           break;
         } case 'disconnect': {
-          this.session.disconnect();
+          this.disconnectSession();
           break;
+        } case 'connect': {
+          this.connectSession();
+        } default: {
+          console.error('Got unknown inspect command. command: ', msg.cmd)
         }
       }
     })
   }
 
-  private runServer(port: number) {
-    if (this.server?.listening) {
-      console.log('Inspect server already running');
+  private connectSession() {
+    if (this.isSessionConnected) {
+      // Double connection throws error.
       return;
     }
-    this.server = this.app.listen(port, () => console.log(`Dynamic logger listening at http://localhost:${port}`));
+    this.session.connect();
+    this.isSessionConnected = true;
+  }
+
+  private disconnectSession() {
+    this.session.disconnect();
+    this.isSessionConnected = false;
+  }
+
+  private addLoggerAppToServer(server: http.Server) {
+    console.log("Adding to server")
+    server.on('request', (req, res) => {
+      if (req.url === this.LOGPOINT_ROUTE && this.isActive) {
+        this.app(req, res);
+      }
+    })
   }
 
   // Called on Master
@@ -167,12 +186,12 @@ class DynamicLogger {
         }
         resolve(result);
       });
-    }).catch(console.log);
+    });
   }
 
   private errorHandler(err: any, req: any, res: any, next: any) {
     console.error("Error adding logpoint. Error: ", err);
-    return res.status(err.status || 500).send(err);
+    return res.status(err.status || 500).send(err.message);
   }
 }
 

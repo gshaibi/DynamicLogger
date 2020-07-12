@@ -7,7 +7,7 @@ curl -s -XPOST -H 'Content-Type: application/json' -d '{
   "urlRegex": "server",
   "lineNumber": 11,
   "message": "t"
-}' 'http://localhost:3001/logpoint' > /dev/null
+}' 'http://localhost:3000/logpoint' > /dev/null
 
 sleep 1
 curl -s -XGET 'http://localhost:3000/' > /dev/null

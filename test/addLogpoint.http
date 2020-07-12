@@ -1,8 +1,8 @@
-POST http://localhost:3001/logpoint
+POST http://localhost:10000/logpoint
 Content-Type: application/json
 
 {
   "urlRegex": "cluster",
-  "lineNumber": 26,
+  "lineNumber": 32,
   "message": "ff + \" On process\" + process.pid"
 }
