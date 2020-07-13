@@ -97,7 +97,6 @@ class DynamicLogger {
   }
 
   private addLoggerAppToServer(server: http.Server) {
-    console.log("Adding to server")
     server.on('request', (req, res) => {
       if (req.url === this.LOGPOINT_ROUTE && this._isActive) {
         this._app(req, res);
