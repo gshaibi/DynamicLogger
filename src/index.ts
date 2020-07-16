@@ -14,7 +14,7 @@ class DynamicLogger {
   private _isActive: boolean = false;
   private _isSessionConnected: boolean = false;
 
-  public readonly LOGPOINT_ROUTE = '/logpoint';
+  private readonly LOGPOINT_ROUTE = '/logpoint';
 
   // Called on Master
   constructor() {

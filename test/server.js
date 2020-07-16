@@ -13,9 +13,6 @@ app.get('/', (req, res) => {
   res.send('Hello World!')
 })
 
-// Do not treat the dynamic logger's route.
-app.all(dynamicLogger.LOGPOINT_ROUTE, (req, res) => {});
-
 const server = http.createServer(app);
 dynamicLogger.activate();
 dynamicLogger.addLoggerToServer(server);
